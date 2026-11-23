@@ -7,7 +7,7 @@ homeassistant + aiophyn importable (CI installs both); skipped otherwise.
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -228,5 +228,48 @@ async def test_local_scheduler_enable_feeds_preference_switch():
     assert device.scheduled_leak_test_enabled is None
     await _apply(device, {"scheduler_enable": True})
     assert device.scheduled_leak_test_enabled is True
+    await _apply(device, {"scheduler_enable": False})
+    assert device.scheduled_leak_test_enabled is False
+
+
+@pytest.mark.parametrize("flag", [True, 1, "true", "1"])
+async def test_local_plumbing_check_accepts_truthy_encodings(flag):
+    device = make_device()
+    await _apply(device, {"sov_state_str": "closed", "sov_plumbing_check_in_progress": flag})
+    assert device.leak_test_running is True
+
+
+@pytest.mark.parametrize("flag", [False, 0, "false", "0", None, "maybe", 2])
+async def test_local_plumbing_check_ignores_falsy_and_unknown(flag):
+    device = make_device()
+    await _apply(device, {"sov_state_str": "closed", "sov_plumbing_check_in_progress": flag})
+    assert device.leak_test_running is False
+
+
+async def test_local_scheduler_enable_accepts_int_and_string():
+    device = make_device()
+    await _apply(device, {"scheduler_enable": 1})
+    assert device.scheduled_leak_test_enabled is True
+    await _apply(device, {"scheduler_enable": "false"})
+    assert device.scheduled_leak_test_enabled is False
+
+
+async def test_local_unmapped_sov_leaves_cloud_throttle_alone():
+    """An unmappable valve state must not suppress the cloud state fetch."""
+    device = make_device()
+    await _apply(device, {"sov_state_str": "wedged", "sensor_pressure_1": 44.0})
+    assert "last_updated" not in device._device_state
+    await _apply(device, {"sov_state_str": "opened", "sensor_pressure_1": 44.0})
+    assert "last_updated" in device._device_state
+
+
+async def test_local_scheduler_held_after_cloud_write():
+    """A device that has not synced yet cannot undo a cloud toggle."""
+    device = make_device()
+    device._coordinator.api_client.device.set_device_preferences = AsyncMock()
+    await device.set_scheduler_enabled(True)
+    await _apply(device, {"scheduler_enable": False})
+    assert device.scheduled_leak_test_enabled is True
+    device._scheduler_set_ts -= 61
     await _apply(device, {"scheduler_enable": False})
     assert device.scheduled_leak_test_enabled is False

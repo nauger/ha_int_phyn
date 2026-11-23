@@ -189,3 +189,14 @@ def test_parse_prefers_output_wrapper_when_present():
 def test_reboot_action_constant():
     assert jnap.ACTION_REBOOT == "http://phyn.com/jnap/core/Reboot"
     assert hasattr(JnapClient, "reboot")
+
+
+def test_content_length_found_after_lf_terminated_debug_line():
+    """The debug line may land directly before Content-Length."""
+    header = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"GetDataFromDaemon: Thread 1 calling WASP_Init\n"
+        b"Content-Length: 42\r\n"
+        b"Server: lighttpd/1.4.49"
+    )
+    assert jnap._parse_content_length(header) == 42

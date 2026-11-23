@@ -78,11 +78,11 @@ def build_request(host: str, action: str, payload: dict | None = None) -> bytes:
 def _parse_content_length(header_block: bytes) -> int | None:
     """Return the Content-Length from a raw header block, tolerating junk lines.
 
-    The firmware's debug line is LF-terminated, so after splitting on CRLF it
-    may be glued to the following header; Content-Length is always on its own
-    CRLF line, so a plain ``name: value`` partition per line is sufficient.
+    The firmware's debug line is LF-terminated, so splitting on CRLF alone
+    would glue it to whichever header follows and hide that header. Split on
+    bare LF as well so Content-Length is found wherever the debug line lands.
     """
-    for line in header_block.decode(errors="replace").split("\r\n"):
+    for line in header_block.decode(errors="replace").replace("\r\n", "\n").split("\n"):
         name, sep, value = line.partition(":")
         if sep and name.strip().lower() == "content-length":
             with contextlib.suppress(ValueError):
